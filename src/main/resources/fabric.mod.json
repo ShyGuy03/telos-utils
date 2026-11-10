@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "telosutils",
+  "version": "${version}",
+  "name": "Telos Utils",
+  "description": "Client-side utilities for Telos Realms: a DPS meter that reads the damage numbers over enemies, and a boss HP display read from the boss bar.",
+  "authors": ["shywastaken"],
+  "contact": {
+    "homepage": "https://github.com/ShyGuy03/telos-utils",
+    "sources": "https://github.com/ShyGuy03/telos-utils",
+    "issues": "https://github.com/ShyGuy03/telos-utils/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/telosutils/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.telosutils.TelosUtilsClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~26.1",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
