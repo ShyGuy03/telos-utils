@@ -17,6 +17,9 @@ import java.util.UUID;
  * remaining health, so the fill amount is the boss HP percentage (0% means it's dead).
  */
 final class BossHp {
+    /** A live boss bar: which boss it is (null if unknown), its health 0..1, and its phase thresholds. */
+    record BossBar(UUID id, String name, float hp, BossData.Phase[] phases) {}
+
     private static final int MAX_BARS = 3;
 
     private static Field eventsField;
@@ -25,18 +28,24 @@ final class BossHp {
 
     private BossHp() {}
 
-    /** Health of each live boss bar, 0..1, in on-screen order. */
-    static List<Float> bars() {
-        List<Float> out = new ArrayList<>();
+    /** Every live boss bar, in on-screen order. */
+    static List<BossBar> bars() {
+        List<BossBar> out = new ArrayList<>();
         Map<UUID, LerpingBossEvent> events = events();
         if (events == null) return out;
-        for (Map.Entry<UUID, LerpingBossEvent> entry : events.entrySet()) {
-            LerpingBossEvent bar = entry.getValue();
+        for (LerpingBossEvent bar : events.values()) {
             float progress = bar.getProgress();
-            if (TelosUtilsClient.CONFIG.debug && logged.add(entry.getKey())) {
-                System.out.println("[TelosUtils debug] boss bar " + bar.getName() + " at " + progress);
+            int hash = bar.getName().hashCode();
+            String name = BossData.nameOf(hash);
+            if (TelosUtilsClient.CONFIG.debug && logged.add(bar.getId())) {
+                String msg = "boss bar " + (name != null ? name : "UNKNOWN") + " hash=" + hash + " hp=" + progress;
+                System.out.println("[TelosUtils debug] " + msg + " name=" + bar.getName());
+                if (Minecraft.getInstance().player != null) {
+                    Minecraft.getInstance().player.sendSystemMessage(
+                            net.minecraft.network.chat.Component.literal("§7[DPS debug] " + msg));
+                }
             }
-            if (progress > 0f) out.add(progress);
+            if (progress > 0f) out.add(new BossBar(bar.getId(), name, progress, BossData.phasesOf(name)));
             if (out.size() == MAX_BARS) break;
         }
         return out;

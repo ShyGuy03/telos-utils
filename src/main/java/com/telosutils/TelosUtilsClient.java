@@ -32,13 +32,14 @@ public class TelosUtilsClient implements ClientModInitializer {
     public void onInitializeClient() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             TRACKER.tick(client);
+            PhaseWarning.INSTANCE.tick(client);
             while (OPEN_MENU_KEY.consumeClick()) openMenuNextTick = true;
             if (openMenuNextTick && client.screen == null) {
                 openMenuNextTick = false;
                 client.setScreen(new DpsConfigScreen(null));
             }
         });
-        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("telosutils", "hud"), DpsHud::render);
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("telosutils", "hud"), Huds::render);
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> dispatcher.register(
                 literal("dps")

@@ -30,6 +30,21 @@ public class DpsConfig {
     public int hudX = 4;
     public int hudY = 4;
 
+    // Boss HP display
+    public int bossX = 4;
+    public int bossY = 50;
+    public float bossScale = 1.0f;
+
+    // Phase warnings
+    public boolean phaseWarnings = true;
+    /** Warn when the boss is within this many percent above a phase change. */
+    public float warnWithin = 5.0f;
+    public boolean phaseSound = true;
+    /** -1 means centred horizontally. */
+    public int warnX = -1;
+    public int warnY = 60;
+    public float warnScale = 1.0f;
+
     // Tracking
     /** Only damage numbers within this many blocks of you are counted. */
     public int range = 16;

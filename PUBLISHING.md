@@ -2,7 +2,7 @@
 
 Everything you need is in the `release/` folder:
 
-- `release/telos-utils-1.0.0.jar`: the file you upload
+- `release/telos-utils-1.1.0.jar`: the file you upload
 - `release/icon.png`: the project icon
 
 ## 0. Before you start
@@ -60,14 +60,14 @@ Open the **Versions** tab and click **Create a version**:
 
 | Field | Value |
 |---|---|
-| File | `release/telos-utils-1.0.0.jar` |
-| Version name | `1.0.0` |
-| Version number | `1.0.0` |
+| File | `release/telos-utils-1.1.0.jar` |
+| Version name | `1.1.0` |
+| Version number | `1.1.0` |
 | Release channel | Release (or **Beta** if you want to test with others first) |
 | Loaders | Fabric |
 | Game versions | 26.1.2 |
 | Dependencies | **Fabric API**: Required |
-| Changelog | Paste the `1.0.0` section from `CHANGELOG.md` |
+| Changelog | Paste the newest section from `CHANGELOG.md` |
 
 Click **Create**.
 

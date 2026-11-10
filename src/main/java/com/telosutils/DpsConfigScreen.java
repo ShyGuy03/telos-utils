@@ -20,17 +20,22 @@ import java.util.function.DoubleFunction;
 import java.util.function.DoubleSupplier;
 
 /**
- * The settings menu: a single draggable panel with toggles, sliders and buttons, styled after
- * Melinoe's click GUI. Drag the title bar to move it, scroll to see more, hover an option for help.
+ * The settings menu: a wide, draggable two-column panel with toggles, sliders and buttons, styled
+ * after Melinoe's click GUI. Drag the title bar to move it, hover an option for help.
  */
 public class DpsConfigScreen extends Screen {
-    private static final int W = 196;
+    private static final int COL_W = 184;
+    private static final int GAP = 8;
+    private static final int W = COL_W * 2 + GAP + 8;
     private static final int HEADER = 20;
     private static final int PAD = 4;
     private static final long TOOLTIP_DELAY_MS = 400;
 
     private final Screen parent;
-    private final List<Row> rows = new ArrayList<>();
+    private final List<Row> left = new ArrayList<>();
+    private final List<Row> right = new ArrayList<>();
+    private final List<Row> footer = new ArrayList<>();
+    private final List<Row> all = new ArrayList<>();
 
     private int px;
     private int py;
@@ -51,60 +56,76 @@ public class DpsConfigScreen extends Screen {
         super(Component.literal("Telos Utils"));
         this.parent = parent;
         build();
+        all.addAll(left);
+        all.addAll(right);
+        all.addAll(footer);
     }
 
     private void build() {
         DpsConfig c = TelosUtilsClient.CONFIG;
 
-        rows.add(new Section("Display"));
-        rows.add(new Toggle("Show HUD", "Shows the DPS overlay on screen.",
+        // Left column: the DPS meter and how it tracks damage.
+        left.add(new Section("DPS meter"));
+        left.add(new Toggle("Show DPS", "Shows the DPS card on screen.",
                 () -> c.hudEnabled, v -> c.hudEnabled = v));
-        rows.add(new Toggle("Peak DPS", "The highest DPS you reached during the fight, checked once a second.",
+        left.add(new Toggle("Peak DPS", "The highest DPS you reached during the fight, checked once a second.",
                 () -> c.showPeak, v -> c.showPeak = v));
-        rows.add(new Toggle("Average DPS", "Your average DPS, checked once a second. Seconds where you weren't hitting anything don't count.",
+        left.add(new Toggle("Average DPS", "Your average DPS, checked once a second. Seconds where you weren't hitting anything don't count.",
                 () -> c.showAvg, v -> c.showAvg = v));
-        rows.add(new Toggle("Total damage", "All damage dealt during the fight.",
+        left.add(new Toggle("Total damage", "All damage dealt during the fight.",
                 () -> c.showTotal, v -> c.showTotal = v));
-        rows.add(new Toggle("Fight time", "How long the current fight has lasted.",
+        left.add(new Toggle("Fight time", "How long the current fight has lasted.",
                 () -> c.showTime, v -> c.showTime = v));
-        rows.add(new Toggle("Boss HP", "Shows how much health the boss has left, read from the boss bar at the top of the screen.",
-                () -> c.showBossHp, v -> c.showBossHp = v));
-        rows.add(new Slider("HUD scale", "Size of the DPS overlay. You can also scroll over it in the HUD editor.",
-                0.5, 3.0, 0.1, () -> c.hudScale, v -> c.hudScale = (float) v,
-                v -> String.format(Locale.ROOT, "%.1fx", v)));
-        rows.add(new Slider("Background", "How see-through the overlay's background is.",
-                0, 100, 5, () -> c.bgOpacity, v -> c.bgOpacity = (int) Math.round(v),
-                v -> Math.round(v) + "%"));
-        rows.add(new Buttons(new Button("Edit HUD position",
-                () -> Minecraft.getInstance().setScreen(new HudEditorScreen(this)))));
-
-        rows.add(new Section("Tracking"));
-        rows.add(new Slider("DPS window", "Live DPS is the damage from the last N seconds divided by N.",
+        left.add(new Toggle("Chat summary", "Posts a summary in chat when a fight ends.",
+                () -> c.chatSummary, v -> c.chatSummary = v));
+        left.add(new Section("Tracking"));
+        left.add(new Slider("DPS window", "Live DPS is the damage from the last N seconds divided by N.",
                 1, 15, 1, () -> c.windowSeconds, v -> c.windowSeconds = (int) Math.round(v),
                 v -> Math.round(v) + "s"));
-        rows.add(new Slider("Fight ends after", "A fight ends after this many seconds without dealing damage.",
+        left.add(new Slider("Fight ends after", "A fight ends after this many seconds without dealing damage.",
                 2, 30, 1, () -> c.fightTimeoutSeconds, v -> c.fightTimeoutSeconds = (int) Math.round(v),
                 v -> Math.round(v) + "s"));
-        rows.add(new Slider("Range", "Only damage numbers within this many blocks of you count.",
+        left.add(new Slider("Range", "Only damage numbers within this many blocks of you count.",
                 4, 64, 1, () -> c.range, v -> c.range = (int) Math.round(v),
                 v -> Math.round(v) + " blocks"));
-        rows.add(new Toggle("Chat summary", "Posts a summary in chat when a fight ends.",
-                () -> c.chatSummary, v -> c.chatSummary = v));
-        rows.add(new Toggle("Debug", "Prints every floating text the mod sees in chat, and whether it was counted.",
+
+        // Right column: bosses, layout and controls.
+        right.add(new Section("Bosses"));
+        right.add(new Toggle("Boss HP", "Shows the boss's name and health, read from the boss bar, with marks where its phases change.",
+                () -> c.showBossHp, v -> c.showBossHp = v));
+        right.add(new Toggle("Phase warnings", "Pops up a warning when a boss is about to change phase, and announces the new phase.",
+                () -> c.phaseWarnings, v -> c.phaseWarnings = v));
+        right.add(new Slider("Warn within", "How close to a phase change (in boss HP %) the warning appears. 5% means it shows from 71% for a phase at 66%.",
+                1, 15, 0.5, () -> c.warnWithin, v -> c.warnWithin = (float) v,
+                v -> String.format(Locale.ROOT, "%.1f%%", v)));
+        right.add(new Toggle("Warning sound", "Plays a ping when the warning appears and a bell when the new phase starts.",
+                () -> c.phaseSound, v -> c.phaseSound = v));
+        right.add(new Section("Layout"));
+        right.add(new Slider("Background", "How see-through the cards' backgrounds are.",
+                0, 100, 5, () -> c.bgOpacity, v -> c.bgOpacity = (int) Math.round(v),
+                v -> Math.round(v) + "%"));
+        right.add(new Buttons(new Button("Edit HUD layout",
+                () -> Minecraft.getInstance().setScreen(new HudEditorScreen(this)))));
+        right.add(new Section("Controls"));
+        right.add(new KeybindRow("Menu key", "The key that opens this menu. Click, then press a key. Esc cancels."));
+        right.add(new Toggle("Debug", "Prints every floating text and boss bar the mod sees in chat. Useful for reporting problems.",
                 () -> c.debug, v -> c.debug = v));
 
-        rows.add(new Section("Controls"));
-        rows.add(new KeybindRow("Menu key", "The key that opens this menu. Click, then press a key. Esc cancels."));
-        rows.add(new Buttons(
+        footer.add(new Buttons(
                 new Button("Reset stats", TelosUtilsClient.TRACKER::reset),
                 new Button("Done", this::onClose)));
+    }
+
+    private static int heightOf(List<Row> rows) {
+        int h = 0;
+        for (Row r : rows) h += r.height();
+        return h;
     }
 
     @Override
     protected void init() {
         DpsConfig c = TelosUtilsClient.CONFIG;
-        contentH = PAD * 2;
-        for (Row r : rows) contentH += r.height();
+        contentH = PAD * 2 + Math.max(heightOf(left), heightOf(right)) + 4 + heightOf(footer);
         int panelH = HEADER + contentH;
         px = c.menuX >= 0 ? c.menuX : (width - W) / 2;
         py = c.menuY >= 0 ? c.menuY : Math.max(8, (height - panelH) / 2);
@@ -119,6 +140,27 @@ public class DpsConfigScreen extends Screen {
         scroll = Math.clamp(scroll, 0, Math.max(0, contentH - bodyH));
     }
 
+    /** Positions every row: two columns side by side, then the footer across the full width. */
+    private void layout() {
+        int top = bodyTop + PAD - scroll;
+        int y = top;
+        for (Row r : left) {
+            r.place(px + 4, y, COL_W);
+            y += r.height();
+        }
+        int leftBottom = y;
+        y = top;
+        for (Row r : right) {
+            r.place(px + 4 + COL_W + GAP, y, COL_W);
+            y += r.height();
+        }
+        y = Math.max(leftBottom, y) + 4;
+        for (Row r : footer) {
+            r.place(px + 4, y, W - 8);
+            y += r.height();
+        }
+    }
+
     // ---- Rendering ----
 
     @Override
@@ -131,6 +173,7 @@ public class DpsConfigScreen extends Screen {
         super.extractRenderState(g, mouseX, mouseY, delta);
         Font font = Minecraft.getInstance().font;
         clampPanel();
+        layout();
 
         int totalH = HEADER + bodyH;
         Ui.roundRect(g, px + 2, py + 3, W, totalH, 5, 0x50000000); // drop shadow
@@ -141,24 +184,22 @@ public class DpsConfigScreen extends Screen {
         String title = "§lTelos Utils";
         g.text(font, title, px + (W - font.width(title)) / 2, py + 6, Ui.WHITE, true);
 
-        // Body
         Row nowHovered = null;
         g.enableScissor(px, bodyTop + 1, px + W, bodyTop + bodyH);
-        int y = bodyTop + PAD - scroll;
-        for (Row r : rows) {
-            r.y = y;
-            boolean visible = y + r.height() > bodyTop && y < bodyTop + bodyH;
-            if (visible) {
-                boolean hover = Ui.inside(mouseX, mouseY, px, y, W, r.height())
-                        && mouseY > bodyTop && mouseY < bodyTop + bodyH;
-                if (hover) nowHovered = r;
-                r.render(g, font, px, y, mouseX, mouseY, hover);
-            }
-            y += r.height();
+        // Divider between the two columns.
+        int divX = px + 4 + COL_W + GAP / 2;
+        g.fill(divX, bodyTop + PAD + 2 - scroll, divX + 1,
+                bodyTop + PAD - scroll + Math.max(heightOf(left), heightOf(right)), 0xFF242424);
+        for (Row r : all) {
+            boolean visible = r.y + r.height() > bodyTop && r.y < bodyTop + bodyH;
+            if (!visible) continue;
+            boolean hover = Ui.inside(mouseX, mouseY, r.x, r.y, r.w, r.height())
+                    && mouseY > bodyTop && mouseY < bodyTop + bodyH;
+            if (hover) nowHovered = r;
+            r.render(g, font, mouseX, mouseY, hover);
         }
         g.disableScissor();
 
-        // Scrollbar
         if (contentH > bodyH) {
             int trackH = bodyH - 4;
             int thumbH = Math.max(12, trackH * bodyH / contentH);
@@ -167,27 +208,25 @@ public class DpsConfigScreen extends Screen {
             g.fill(px + W - 3, thumbY, px + W - 1, thumbY + thumbH, Ui.ACCENT);
         }
 
-        // Tooltip after hovering an option for a moment
         if (nowHovered != hovered) {
             hovered = nowHovered;
             hoverStart = System.currentTimeMillis();
         }
         if (hovered != null && hovered.desc != null && activeSlider == null && !draggingPanel
                 && System.currentTimeMillis() - hoverStart > TOOLTIP_DELAY_MS) {
-            drawTooltip(g, font, hovered.desc, hovered.y);
+            drawTooltip(g, font, hovered.desc, mouseX, mouseY);
         }
     }
 
-    private void drawTooltip(GuiGraphicsExtractor g, Font font, String text, int rowY) {
-        int maxW = 150;
-        List<String> lines = wrap(font, text, maxW);
+    private void drawTooltip(GuiGraphicsExtractor g, Font font, String text, int mouseX, int mouseY) {
+        List<String> lines = wrap(font, text, 160);
         int tw = 0;
         for (String l : lines) tw = Math.max(tw, font.width(l));
         int bw = tw + 12;
         int bh = lines.size() * (font.lineHeight + 1) + 10;
-        int bx = px + W + 6;
-        if (bx + bw > width) bx = px - 6 - bw;
-        int by = Math.clamp(rowY, 2, Math.max(2, height - bh - 2));
+        int bx = mouseX + 12;
+        if (bx + bw > width - 2) bx = mouseX - 12 - bw;
+        int by = Math.clamp(mouseY + 8, 2, Math.max(2, height - bh - 2));
         Ui.outlinedRoundRect(g, bx, by, bw, bh, 4, Ui.CONTROL, Ui.ACCENT);
         int ty = by + 6;
         for (String l : lines) {
@@ -229,8 +268,8 @@ public class DpsConfigScreen extends Screen {
             return true;
         }
         if (my > bodyTop && my < bodyTop + bodyH) {
-            for (Row r : rows) {
-                if (Ui.inside(mx, my, px, r.y, W, r.height()) && r.click(mx, my, e.button())) return true;
+            for (Row r : all) {
+                if (Ui.inside(mx, my, r.x, r.y, r.w, r.height()) && r.click(mx, my, e.button())) return true;
             }
         }
         return super.mouseClicked(e, doubleClick);
@@ -305,16 +344,24 @@ public class DpsConfigScreen extends Screen {
     private abstract static class Row {
         final String label;
         final String desc;
+        int x;
         int y;
+        int w;
 
         Row(String label, String desc) {
             this.label = label;
             this.desc = desc;
         }
 
+        void place(int x, int y, int w) {
+            this.x = x;
+            this.y = y;
+            this.w = w;
+        }
+
         abstract int height();
 
-        abstract void render(GuiGraphicsExtractor g, Font font, int x, int y, int mx, int my, boolean hover);
+        abstract void render(GuiGraphicsExtractor g, Font font, int mx, int my, boolean hover);
 
         boolean click(double mx, double my, int button) {
             return false;
@@ -332,10 +379,10 @@ public class DpsConfigScreen extends Screen {
         }
 
         @Override
-        void render(GuiGraphicsExtractor g, Font font, int x, int y, int mx, int my, boolean hover) {
-            g.text(font, label, x + 8, y + 5, Ui.MINT, false);
-            int lx = x + 8 + font.width(label) + 5;
-            g.fill(lx, y + 9, x + W - 8, y + 10, 0xFF2C2C2C);
+        void render(GuiGraphicsExtractor g, Font font, int mx, int my, boolean hover) {
+            g.text(font, label, x + 4, y + 5, Ui.MINT, false);
+            int lx = x + 4 + font.width(label) + 5;
+            g.fill(lx, y + 9, x + w - 4, y + 10, 0xFF2C2C2C);
         }
     }
 
@@ -355,14 +402,14 @@ public class DpsConfigScreen extends Screen {
         }
 
         @Override
-        void render(GuiGraphicsExtractor g, Font font, int x, int y, int mx, int my, boolean hover) {
-            if (hover) g.fill(x + 2, y, x + W - 2, y + height(), 0x0FFFFFFF);
+        void render(GuiGraphicsExtractor g, Font font, int mx, int my, boolean hover) {
+            if (hover) g.fill(x, y, x + w, y + height(), 0x0FFFFFFF);
             boolean on = get.getAsBoolean();
-            g.text(font, label, x + 8, y + 4, on ? Ui.WHITE : Ui.TEXT_DIM, false);
+            g.text(font, label, x + 4, y + 4, on ? Ui.WHITE : Ui.TEXT_DIM, false);
 
             int tw = 20;
             int th = 10;
-            int tx = x + W - 8 - tw;
+            int tx = x + w - 4 - tw;
             int ty = y + 3;
             int fill = on ? Ui.ACCENT : (hover ? Ui.CONTROL_HOVER : Ui.CONTROL);
             int border = on ? Ui.ACCENT : 0xFF3C3C3C;
@@ -399,29 +446,21 @@ public class DpsConfigScreen extends Screen {
 
         @Override
         int height() {
-            return 26;
-        }
-
-        private int trackX() {
-            return px + 8;
-        }
-
-        private int trackW() {
-            return W - 16;
+            return 25;
         }
 
         @Override
-        void render(GuiGraphicsExtractor g, Font font, int x, int y, int mx, int my, boolean hover) {
-            if (hover) g.fill(x + 2, y, x + W - 2, y + height(), 0x0FFFFFFF);
+        void render(GuiGraphicsExtractor g, Font font, int mx, int my, boolean hover) {
+            if (hover) g.fill(x, y, x + w, y + height(), 0x0FFFFFFF);
             double v = get.getAsDouble();
-            g.text(font, label, x + 8, y + 3, Ui.WHITE, false);
+            g.text(font, label, x + 4, y + 3, Ui.WHITE, false);
             String value = format.apply(v);
-            g.text(font, value, x + W - 8 - font.width(value), y + 3, Ui.TEXT_DIM, false);
+            g.text(font, value, x + w - 4 - font.width(value), y + 3, Ui.TEXT_DIM, false);
 
             double pct = (v - min) / (max - min);
-            int tx = trackX();
-            int tw = trackW();
-            int ty = y + 16;
+            int tx = x + 4;
+            int tw = w - 8;
+            int ty = y + 15;
             Ui.roundRect(g, tx, ty, tw, 4, 2, Ui.CONTROL);
             int filled = (int) Math.round(tw * pct);
             if (filled > 0) Ui.roundRect(g, tx, ty, filled, 4, 2, Ui.ACCENT);
@@ -438,7 +477,7 @@ public class DpsConfigScreen extends Screen {
         }
 
         void setFromMouse(double mx) {
-            double pct = Math.clamp((mx - trackX()) / trackW(), 0.0, 1.0);
+            double pct = Math.clamp((mx - (x + 4)) / (w - 8), 0.0, 1.0);
             double v = min + Math.round(pct * (max - min) / step) * step;
             set.accept(Math.clamp(v, min, max));
         }
@@ -446,7 +485,7 @@ public class DpsConfigScreen extends Screen {
 
     private record Button(String label, Runnable action) {}
 
-    private class Buttons extends Row {
+    private static class Buttons extends Row {
         private final Button[] buttons;
 
         Buttons(Button... buttons) {
@@ -460,14 +499,14 @@ public class DpsConfigScreen extends Screen {
         }
 
         private int buttonW() {
-            return (W - 16 - (buttons.length - 1) * 4) / buttons.length;
+            return (w - 8 - (buttons.length - 1) * 4) / buttons.length;
         }
 
         @Override
-        void render(GuiGraphicsExtractor g, Font font, int x, int y, int mx, int my, boolean hover) {
+        void render(GuiGraphicsExtractor g, Font font, int mx, int my, boolean hover) {
             int bw = buttonW();
             for (int i = 0; i < buttons.length; i++) {
-                int bx = x + 8 + i * (bw + 4);
+                int bx = x + 4 + i * (bw + 4);
                 boolean over = Ui.inside(mx, my, bx, y + 3, bw, 16);
                 Ui.outlinedRoundRect(g, bx, y + 3, bw, 16, 4, over ? Ui.CONTROL_HOVER : Ui.CONTROL, Ui.ACCENT);
                 String l = buttons[i].label();
@@ -480,7 +519,7 @@ public class DpsConfigScreen extends Screen {
             if (button != 0) return false;
             int bw = buttonW();
             for (int i = 0; i < buttons.length; i++) {
-                int bx = px + 8 + i * (bw + 4);
+                int bx = x + 4 + i * (bw + 4);
                 if (mx >= bx && mx < bx + bw) {
                     buttons[i].action().run();
                     return true;
@@ -501,13 +540,13 @@ public class DpsConfigScreen extends Screen {
         }
 
         @Override
-        void render(GuiGraphicsExtractor g, Font font, int x, int y, int mx, int my, boolean hover) {
-            if (hover) g.fill(x + 2, y, x + W - 2, y + height(), 0x0FFFFFFF);
-            g.text(font, label, x + 8, y + 5, Ui.WHITE, false);
+        void render(GuiGraphicsExtractor g, Font font, int mx, int my, boolean hover) {
+            if (hover) g.fill(x, y, x + w, y + height(), 0x0FFFFFFF);
+            g.text(font, label, x + 4, y + 5, Ui.WHITE, false);
             boolean capturing = listening == this;
             String key = capturing ? "press a key..." : TelosUtilsClient.OPEN_MENU_KEY.getTranslatedKeyMessage().getString();
             int bw = font.width(key) + 12;
-            int bx = x + W - 8 - bw;
+            int bx = x + w - 4 - bw;
             Ui.outlinedRoundRect(g, bx, y + 2, bw, 14, 4, Ui.CONTROL, Ui.ACCENT);
             g.text(font, key, bx + 6, y + 5, capturing ? 0xFFFFFF55 : Ui.WHITE, false);
         }

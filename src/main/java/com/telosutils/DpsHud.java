@@ -1,39 +1,47 @@
 package com.telosutils;
 
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
-/** The DPS overlay: a dark rounded card with a green accent bar, in Melinoe's style. */
-public final class DpsHud {
+/** The DPS card: live DPS on top, then peak/avg and total/time, in Melinoe's style. */
+final class DpsHud extends HudElement {
+    static final DpsHud INSTANCE = new DpsHud();
+
     private record Stat(String label, String value) {}
 
     private static final int PAD = 4;
     private static final int BAR = 2;
     private static final int GAP = 10;
-    private static final int BOSS_BAR_H = 3;
 
-    /** Size of the HUD the last time it was drawn, in screen (GUI) pixels including scale. */
-    static int lastWidth;
-    static int lastHeight;
-
-    private DpsHud() {}
-
-    public static void render(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
-        Minecraft mc = Minecraft.getInstance();
-        DpsConfig cfg = TelosUtilsClient.CONFIG;
-        if (!cfg.hudEnabled || mc.player == null || mc.options.hideGui) return;
-        if (mc.screen instanceof HudEditorScreen) return; // the editor draws its own preview
-        draw(g, cfg.hudX, cfg.hudY, cfg.hudScale, false);
+    private DpsHud() {
+        super("DPS", "Live, peak and average DPS, total damage and fight time.");
     }
 
-    /** Draws the HUD at (x, y); with {@code example} it shows sample numbers for the editor. */
-    static void draw(GuiGraphicsExtractor g, int x, int y, float scale, boolean example) {
+    @Override boolean enabled() { return TelosUtilsClient.CONFIG.hudEnabled; }
+    @Override int rawX() { return TelosUtilsClient.CONFIG.hudX; }
+    @Override int rawY() { return TelosUtilsClient.CONFIG.hudY; }
+    @Override float scale() { return TelosUtilsClient.CONFIG.hudScale; }
+
+    @Override
+    void setPosition(int x, int y) {
+        TelosUtilsClient.CONFIG.hudX = x;
+        TelosUtilsClient.CONFIG.hudY = y;
+    }
+
+    @Override void setScale(float scale) { TelosUtilsClient.CONFIG.hudScale = scale; }
+
+    @Override
+    void reset() {
+        setPosition(4, 4);
+        setScale(1.0f);
+    }
+
+    @Override
+    protected int[] drawContent(GuiGraphicsExtractor g, boolean example) {
         DpsConfig cfg = TelosUtilsClient.CONFIG;
         DpsTracker t = TelosUtilsClient.TRACKER;
         Font font = Minecraft.getInstance().font;
@@ -69,14 +77,6 @@ public final class DpsHud {
         }
         rows.removeIf(List::isEmpty);
 
-        List<Float> bosses = !cfg.showBossHp ? List.of() : example ? List.of(0.624f) : BossHp.bars();
-        List<String> bossLabels = new ArrayList<>();
-        List<String> bossValues = new ArrayList<>();
-        for (int i = 0; i < bosses.size(); i++) {
-            bossLabels.add(bosses.size() > 1 ? "Boss " + (i + 1) + " " : "Boss HP ");
-            bossValues.add(String.format(Locale.ROOT, "%.1f%%", bosses.get(i) * 100));
-        }
-
         // Column widths so the second stat on each row lines up.
         int col1 = 0;
         int col2 = 0;
@@ -91,24 +91,12 @@ public final class DpsHud {
         int headWidth = font.width(dpsLabel) + font.width(headlineText)
                 + (headlineNote != null ? 6 + font.width(headlineNote) : 0);
 
-        int bossWidth = 0;
-        for (int i = 0; i < bosses.size(); i++) {
-            bossWidth = Math.max(bossWidth, font.width(bossLabels.get(i)) + font.width(bossValues.get(i)));
-        }
-
         int lineH = font.lineHeight + 2;
-        int bossH = lineH + BOSS_BAR_H + 2;
-        int innerW = Math.max(Math.max(headWidth, rowsWidth), Math.max(bossWidth, bosses.isEmpty() ? 0 : 70));
+        int innerW = Math.max(headWidth, rowsWidth);
         int w = BAR + PAD * 2 + innerW;
-        int h = PAD * 2 + lineH * (1 + rows.size()) - 2 + bosses.size() * bossH + (bosses.isEmpty() ? 0 : 6);
+        int h = PAD * 2 + lineH * (1 + rows.size()) - 2;
 
-        g.pose().pushMatrix();
-        g.pose().translate(x, y);
-        g.pose().scale(scale, scale);
-
-        int bg = Ui.withAlpha(Ui.PANEL, cfg.bgOpacity * 255 / 100);
-        Ui.roundRect(g, 0, 0, w, h, 3, bg);
-        g.fill(0, 2, BAR, h - 2, Ui.ACCENT); // inset so it sits inside the rounded corners
+        card(g, w, h, Ui.ACCENT);
 
         int tx = BAR + PAD;
         int ty = PAD;
@@ -125,37 +113,7 @@ public final class DpsHud {
             drawStat(g, font, row.get(0), tx, ty, valueColor);
             if (row.size() > 1) drawStat(g, font, row.get(1), tx + col1 + GAP, ty, valueColor);
         }
-
-        if (!bosses.isEmpty()) {
-            ty += lineH + 1;
-            g.fill(tx, ty, tx + innerW, ty + 1, 0xFF2C2C2C); // divider between DPS stats and boss HP
-            ty += 3;
-            for (int i = 0; i < bosses.size(); i++) {
-                float hp = bosses.get(i);
-                int color = hpColor(hp);
-                String label = bossLabels.get(i);
-                g.text(font, label, tx, ty, Ui.MINT, true);
-                g.text(font, bossValues.get(i), tx + font.width(label), ty, color, true);
-
-                int barY = ty + lineH - 1;
-                Ui.roundRect(g, tx, barY, innerW, BOSS_BAR_H, 1, Ui.CONTROL);
-                int filled = Math.round(innerW * hp);
-                if (filled > 0) Ui.roundRect(g, tx, barY, filled, BOSS_BAR_H, 1, color);
-                ty += bossH;
-            }
-        }
-
-        g.pose().popMatrix();
-
-        lastWidth = Math.round(w * scale);
-        lastHeight = Math.round(h * scale);
-    }
-
-    /** Green above half health, yellow above 20%, red below. */
-    private static int hpColor(float hp) {
-        if (hp > 0.5f) return Ui.ACCENT;
-        if (hp > 0.2f) return 0xFFFFD34F;
-        return 0xFFFF5555;
+        return new int[] {w, h};
     }
 
     private static List<Stat> pair(Stat a, Stat b) {

@@ -10,21 +10,24 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.Locale;
+
 /**
- * Move and resize the DPS overlay, like Melinoe's HUD editor: drag to move, scroll (or +/-) to
- * resize, hold Shift to snap to the centre lines, arrow keys to nudge.
+ * Move and resize every HUD element, like Melinoe's HUD editor: drag to move, scroll (or +/-) over
+ * an element to resize it, hold Shift to snap to the centre lines, arrow keys to nudge, R to reset.
  */
 public class HudEditorScreen extends Screen {
     private static final int SNAP = 6;
     private static final int GUIDE = 0x8800FFFF;
 
     private final Screen parent;
-    private boolean dragging;
+    private HudElement dragging;
+    private HudElement selected;
     private double dragDX;
     private double dragDY;
 
     public HudEditorScreen(Screen parent) {
-        super(Component.literal("Edit DPS HUD"));
+        super(Component.literal("Edit HUD layout"));
         this.parent = parent;
     }
 
@@ -36,7 +39,6 @@ public class HudEditorScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
         super.extractRenderState(g, mouseX, mouseY, delta);
-        DpsConfig c = TelosUtilsClient.CONFIG;
         Font font = Minecraft.getInstance().font;
 
         if (shiftDown()) {
@@ -44,28 +46,42 @@ public class HudEditorScreen extends Screen {
             g.fill(0, height / 2, width, height / 2 + 1, GUIDE);
         }
 
-        DpsHud.draw(g, c.hudX, c.hudY, c.hudScale, true);
-        boolean hover = isOverHud(mouseX, mouseY);
-        g.outline(c.hudX - 1, c.hudY - 1, DpsHud.lastWidth + 2, DpsHud.lastHeight + 2,
-                hover || dragging ? Ui.WHITE : 0x80FFFFFF);
+        HudElement hovered = hovered(mouseX, mouseY);
+        for (HudElement e : Huds.ALL) {
+            if (!e.enabled()) continue;
+            e.draw(g, true);
+            boolean active = e == hovered || e == dragging;
+            g.outline(e.x() - 1, e.y() - 1, e.lastWidth + 2, e.lastHeight + 2, active ? Ui.WHITE : 0x60FFFFFF);
+        }
+
+        // Name and scale of the element under the mouse, like Melinoe.
+        HudElement info = dragging != null ? dragging : hovered;
+        if (info != null) {
+            String label = "§l" + info.name + " §r§7" + String.format(Locale.ROOT, "%.1fx", info.scale());
+            int lx = info.x();
+            int ly = info.y() - font.lineHeight - 3;
+            if (ly < 2) ly = info.y() + info.lastHeight + 3;
+            g.text(font, label, lx, ly, Ui.MINT, true);
+        }
 
         String[] help = {
-                "§lEdit DPS HUD",
-                "Drag to move  •  Scroll or +/- to resize  •  Shift to snap to centre",
-                "Arrow keys nudge  •  R resets  •  Esc to go back",
+                "§lEdit HUD layout",
+                "Drag to move  •  Scroll or +/- over an element to resize  •  Shift to snap to centre",
+                "Arrow keys nudge  •  R resets the element under the mouse  •  Esc to go back",
         };
         int y = height - 12 - help.length * 11;
         for (String line : help) {
             g.centeredText(font, line, width / 2, y, line.startsWith("§l") ? Ui.MINT : Ui.TEXT_DIM);
             y += 11;
         }
-        String scale = String.format("%.1fx", c.hudScale);
-        g.text(font, scale, c.hudX, c.hudY + DpsHud.lastHeight + 3, Ui.TEXT_DIM, true);
     }
 
-    private boolean isOverHud(double mx, double my) {
-        DpsConfig c = TelosUtilsClient.CONFIG;
-        return Ui.inside(mx, my, c.hudX, c.hudY, DpsHud.lastWidth, DpsHud.lastHeight);
+    private HudElement hovered(double mx, double my) {
+        for (int i = Huds.ALL.size() - 1; i >= 0; i--) {
+            HudElement e = Huds.ALL.get(i);
+            if (e.enabled() && e.isOver(mx, my)) return e;
+        }
+        return null;
     }
 
     private boolean shiftDown() {
@@ -74,30 +90,29 @@ public class HudEditorScreen extends Screen {
                 || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_SHIFT);
     }
 
-    private void moveTo(double x, double y) {
-        DpsConfig c = TelosUtilsClient.CONFIG;
-        int w = DpsHud.lastWidth;
-        int h = DpsHud.lastHeight;
+    private void moveTo(HudElement e, double x, double y) {
+        int w = e.lastWidth;
+        int h = e.lastHeight;
         if (shiftDown()) {
             if (Math.abs(x + w / 2.0 - width / 2.0) < SNAP) x = width / 2.0 - w / 2.0;
             if (Math.abs(y + h / 2.0 - height / 2.0) < SNAP) y = height / 2.0 - h / 2.0;
         }
-        c.hudX = (int) Math.round(Math.clamp(x, 0, Math.max(0, width - w)));
-        c.hudY = (int) Math.round(Math.clamp(y, 0, Math.max(0, height - h)));
+        e.setPosition((int) Math.round(Math.clamp(x, 0, Math.max(0, width - w))),
+                (int) Math.round(Math.clamp(y, 0, Math.max(0, height - h))));
     }
 
-    private void rescale(double amount) {
-        DpsConfig c = TelosUtilsClient.CONFIG;
-        c.hudScale = (float) (Math.round(Math.clamp(c.hudScale + amount, 0.5, 3.0) * 10) / 10.0);
+    private static void rescale(HudElement e, double amount) {
+        e.setScale((float) (Math.round(Math.clamp(e.scale() + amount, 0.5, 4.0) * 10) / 10.0));
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
-        DpsConfig c = TelosUtilsClient.CONFIG;
-        if (e.button() == 0 && isOverHud(e.x(), e.y())) {
-            dragging = true;
-            dragDX = c.hudX - e.x();
-            dragDY = c.hudY - e.y();
+        HudElement over = hovered(e.x(), e.y());
+        if (e.button() == 0 && over != null) {
+            dragging = over;
+            selected = over;
+            dragDX = over.x() - e.x();
+            dragDY = over.y() - e.y();
             return true;
         }
         return super.mouseClicked(e, doubleClick);
@@ -105,8 +120,8 @@ public class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent e, double dx, double dy) {
-        if (dragging) {
-            moveTo(e.x() + dragDX, e.y() + dragDY);
+        if (dragging != null) {
+            moveTo(dragging, e.x() + dragDX, e.y() + dragDY);
             return true;
         }
         return super.mouseDragged(e, dx, dy);
@@ -114,31 +129,38 @@ public class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent e) {
-        dragging = false;
+        dragging = null;
         return super.mouseReleased(e);
     }
 
     @Override
     public boolean mouseScrolled(double mx, double my, double h, double v) {
-        rescale(Math.signum(v) * 0.1);
-        return true;
+        HudElement over = hovered(mx, my);
+        if (over != null) {
+            rescale(over, Math.signum(v) * 0.1);
+            selected = over;
+            return true;
+        }
+        return super.mouseScrolled(mx, my, h, v);
     }
 
     @Override
     public boolean keyPressed(KeyEvent e) {
-        DpsConfig c = TelosUtilsClient.CONFIG;
+        Minecraft mc = Minecraft.getInstance();
+        double mx = mc.mouseHandler.getScaledXPos(mc.getWindow());
+        double my = mc.mouseHandler.getScaledYPos(mc.getWindow());
+        HudElement target = hovered(mx, my);
+        if (target == null) target = selected;
+        if (target == null) return super.keyPressed(e);
+
         switch (e.key()) {
-            case GLFW.GLFW_KEY_EQUAL, GLFW.GLFW_KEY_KP_ADD -> rescale(0.1);
-            case GLFW.GLFW_KEY_MINUS, GLFW.GLFW_KEY_KP_SUBTRACT -> rescale(-0.1);
-            case GLFW.GLFW_KEY_LEFT -> moveTo(c.hudX - 1, c.hudY);
-            case GLFW.GLFW_KEY_RIGHT -> moveTo(c.hudX + 1, c.hudY);
-            case GLFW.GLFW_KEY_UP -> moveTo(c.hudX, c.hudY - 1);
-            case GLFW.GLFW_KEY_DOWN -> moveTo(c.hudX, c.hudY + 1);
-            case GLFW.GLFW_KEY_R -> {
-                c.hudX = 4;
-                c.hudY = 4;
-                c.hudScale = 1.0f;
-            }
+            case GLFW.GLFW_KEY_EQUAL, GLFW.GLFW_KEY_KP_ADD -> rescale(target, 0.1);
+            case GLFW.GLFW_KEY_MINUS, GLFW.GLFW_KEY_KP_SUBTRACT -> rescale(target, -0.1);
+            case GLFW.GLFW_KEY_LEFT -> moveTo(target, target.x() - 1, target.y());
+            case GLFW.GLFW_KEY_RIGHT -> moveTo(target, target.x() + 1, target.y());
+            case GLFW.GLFW_KEY_UP -> moveTo(target, target.x(), target.y() - 1);
+            case GLFW.GLFW_KEY_DOWN -> moveTo(target, target.x(), target.y() + 1);
+            case GLFW.GLFW_KEY_R -> target.reset();
             default -> {
                 return super.keyPressed(e);
             }
